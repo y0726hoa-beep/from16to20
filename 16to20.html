@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>單字大師 - 精簡質感版</title>
+    <style>
+        :root { --rose: #a67c84; --deep: #3d2b2f; --perfect: #2e7d32; --normal: #ef6c00; --unfamiliar: #b71c1c; }
+        body { font-family: 'PingFang TC', sans-serif; background: #fffdfd; margin: 0; padding: 15px; color: #000; }
+        .container { max-width: 800px; margin: auto; }
+        .header-tools { position: sticky; top: 0; background: #fffdfd; padding: 10px 0; z-index: 100; border-bottom: 3px solid var(--rose); }
+        input[type="text"] { width: 100%; padding: 12px; border: 2px solid var(--rose); border-radius: 10px; font-size: 16px; outline: none; }
+        .nav-tabs { display: flex; margin: 15px 0; border-radius: 10px; overflow: hidden; border: 2px solid var(--rose); }
+        .tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; font-weight: bold; background: #fdf2f4; color: var(--rose); }
+        .tab.active { background: var(--rose); color: white; }
+        .filter-buttons { display: flex; gap: 6px; justify-content: center; margin-bottom: 15px; }
+        .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--rose); cursor: pointer; font-weight: bold; background: #fff; color: var(--rose); font-size: 13px; }
+        .filter-btn.active { background: var(--deep); color: white; border-color: var(--deep); }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
+        .card { height: 240px; perspective: 1000px; cursor: pointer; }
+        .card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.5s; transform-style: preserve-3d; }
+        .card.flipped .card-inner { transform: rotateY(180deg); }
+        .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; background: #fff; border-radius: 20px; padding: 15px; border: 3px solid var(--deep); box-shadow: 0 4px 10px rgba(0,0,0,0.05); box-sizing: border-box; }
+        .card-back { transform: rotateY(180deg); background: #fdfafb; }
+        .front-main { flex-grow: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center; }
+        .word-eng { font-size: 28px; font-weight: 900; color: #000; line-height: 1.1; }
+        .word-kk { font-size: 15px; color: #555; font-weight: bold; margin-top: 5px; }
+        .word-pos { font-size: 13px; color: var(--rose); font-style: italic; margin-top: 2px; }
+        .front-footer { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .quiz-item { background: #fff; padding: 15px; margin-bottom: 12px; border-radius: 15px; border: 2px solid var(--rose); }
+        .quiz-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-weight: bold; font-size: 16px; }
+        .quiz-input-area { background: #fdf2f4; padding: 12px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        .spell-input { padding: 10px; width: 90%; border: 2px solid var(--deep); border-radius: 8px; font-size: 18px; text-align: center; outline: none; }
+        .spell-input.correct { border-color: var(--perfect); background: #e8f5e9; }
+        .spell-input.wrong { border-color: var(--unfamiliar); background: #ffebee; }
+        .btn-status { border: 1.5px solid var(--rose); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; color: var(--rose); background: #fff; transition: 0.2s; }
+        .btn-status.selected { background: var(--rose); color: white; transform: scale(1.05); }
+        .ans-btn { background: #8e1515; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        .ans-text { display: none; color: #000; font-size: 20px; font-weight: 900; margin-left: 10px; border-bottom: 3px solid #000; }
+        .hidden-hint { background: var(--rose); color: transparent; padding: 1px 8px; border-radius: 5px; cursor: help; font-size: 13px; }
+        .hidden-hint:hover { background: transparent; color: var(--rose); }
+        .section { display: none; } .section.active { display: block; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header-tools"><input type="text" id="s" placeholder="🔍 搜尋單字..." oninput="render()"><div class="filter-buttons" style="margin-top:15px"><button class="filter-btn active" onclick="setF('all', this)">全部</button><button class="filter-btn" onclick="setF('p', this)">完美</button><button class="filter-btn" onclick="setF('n', this)">普通</button><button class="filter-btn" onclick="setF('u', this)">不熟</button></div></div>
+    <div class="nav-tabs"><div class="tab active" id="t1" onclick="show('c')">單字卡</div><div class="tab" id="t2" onclick="show('q')">拼字挑戰</div></div>
+    <div id="secC" class="section active"><div class="card-grid" id="grid"></div></div>
+    <div id="secQ" class="section"><div id="list"></div></div>
+</div>
+<script>
+let states = JSON.parse(localStorage.getItem('vNewDataWithKK')) || {};
+let filter = 'all';
+
+// 已同步更新 KK 音標與實用用法補充的資料庫
+const data = [
+    {e:"associate with", k:"/əˈsoʃɪˌet wɪð/", p:"phr.", c:"將⋯和⋯聯想在一起", d:"associate A with B"},
+    {e:"all walks of life", k:"/ɔl wɔks ʌv laɪf/", p:"phr.", c:"各行各業", d:"people from all walks of life"},
+    {e:"spice up", k:"/spaɪs ʌp/", p:"phr.", c:"增添風味、趣味", d:"spice up the conversation"},
+    {e:"various", k:"/ˈvɛrɪəs/", p:"adj.", c:"各種的", d:"for various reasons"},
+    {e:"consume", k:"/kənˈsum/", p:"v.", c:"吃喝、消耗、消費", d:"consume time and energy"},
+    {e:"serve as", k:"/sɝv æz/", p:"phr.", c:"當⋯用", d:"serve as a warning"},
+    {e:"occasion", k:"/əˈkeʒən/", p:"n.", c:"場合", d:"on special occasions"},
+    {e:"element", k:"/ˈɛləmənt/", p:"n.", c:"元素", d:"a key element of success"},
+    {e:"practically", k:"/ˈpræktɪklɪ/", p:"adv.", c:"幾乎", d:"practically impossible"},
+    {e:"dominant", k:"/ˈdɑmənənt/", p:"adj.", c:"支配的", d:"play a dominant role"},
+    {e:"powdered", k:"/ˈpaʊdɚd/", p:"adj.", c:"粉狀的", d:"powdered sugar / milk"},
+    {e:"creep", k:"/krip/", p:"v.", c:"不知不覺到來", d:"creep in / creep into"},
+    {e:"be combined with", k:"/bi kəmˈbaɪnd wɪð/", p:"phr.", c:"與⋯結合", d:"A be combined with B"},
+    {e:"on-site", k:"/ˈɑnˌsaɪt/", p:"adj.", c:"現場的", d:"on-site inspection / technical support"},
+    {e:"dot", k:"/dɑt/", p:"v.", c:"分布", d:"be dotted with... (點綴著...)"},
+    {e:"credit", k:"/ˈkrɛdɪt/", p:"n.", c:"功勞", d:"take credit for... (歸功於自己)"},
+    {e:"soak", k:"/sok/", p:"v.", c:"浸泡", d:"soak A in B / soak up the sun"},
+    {e:"refreshing", k:"/rɪˈfrɛʃɪŋ/", p:"adj.", c:"提神的", d:"a refreshing drink / breeze"},
+    {e:"brew", k:"/bru/", p:"v.", c:"泡(茶)、煮(咖啡)、釀(酒)", d:"brew a fresh cup of coffee"},
+    {e:"beverage", k:"/ˈbɛvərɪdʒ/", p:"n.", c:"飲料", d:"alcoholic / non-alcoholic beverage"},
+    {e:"medicinal", k:"/məˈdɪsn-l/", p:"adj.", c:"藥用的", d:"for medicinal purposes"},
+    {e:"ceremony", k:"/ˈsɛrəˌmonɪ/", p:"n.", c:"典禮、儀式", d:"opening / wedding ceremony"},
+    {e:"staple", k:"/ˈstepl/", p:"n.", c:"日常必需品", d:"staple food (主食)"},
+    {e:"pastry", k:"/ˈpestrɪ/", p:"n.", c:"糕點", d:"French pastry / pastry chef"},
+    {e:"royal", k:"/ˈrɔɪəl/", p:"adj.", c:"皇家的", d:"the royal family (王室)"},
+    {e:"address", k:"/əˈdrɛs/", p:"v.", c:"稱呼", d:"address A as B"},
+    {e:"military", k:"/ˈmɪləˌtɛrɪ/", p:"n.", c:"軍隊", d:"military service (服兵役)"},
+    {e:"option", k:"/ˈɑpʃən/", p:"n.", c:"選項", d:"have no option but to V (別無選擇只能...)"},
+    {e:"dynasty", k:"/ˈdaɪnəstɪ/", p:"n.", c:"王朝", d:"during the Qing Dynasty"},
+    {e:"official", k:"/əˈfɪʃəl/", p:"adj.", c:"官方的", d:"official announcement / website"},
+    {e:"wedding", k:"/ˈwɛdɪŋ/", p:"n.", c:"婚禮", d:"wedding anniversary (結婚週年)"},
+    {e:"distinguish", k:"/dɪˈstɪŋɡwɪʃ/", p:"v.", c:"區分", d:"distinguish A from B"},
+    {e:"territory", k:"/ˈtɛrəˌtorɪ/", p:"n.", c:"領地", d:"disputed territory (爭議領土)"},
+    {e:"normally", k:"/ˈnɔrməlɪ/", p:"adv.", c:"通常", d:"normally distributed (常態分佈)"},
+    {e:"in short", k:"/ɪn ʃɔrt/", p:"phr.", c:"簡言之", d:"In short, we must act fast."},
+    {e:"sentiment", k:"/ˈsɛntəmənt/", p:"n.", c:"情緒", d:"public sentiment (公眾輿論)"},
+    {e:"designate", k:"/ˈdɛzɪɡˌnet/", p:"v.", c:"指定", d:"be designated as a historic site"},
+    {e:"surname", k:"/ˈsɝˌnem/", p:"n.", c:"姓", d:"maiden surname (娘家姓)"},
+    {e:"duke", k:"/duk/", p:"n.", c:"公爵", d:"the Duke of Edinburgh"},
+    {e:"ascend", k:"/əˈsɛnd/", p:"v.", c:"登上，繼承", d:"ascend the throne (登基)"},
+    {e:"throne", k:"/θron/", p:"n.", c:"王位", d:"succeed to the throne (繼承王位)"},
+    {e:"descendant", k:"/dɪˈsɛndənt/", p:"n.", c:"後代", d:"direct descendant (直系後代)"},
+    {e:"hyphenated", k:"/ˈhaɪfəˌnetɪd/", p:"adj.", c:"帶連字號的", d:"hyphenated words (如 energy-efficient)"},
+    {e:"scholar", k:"/ˈskɑlɚ/", p:"n.", c:"學者", d:"visiting scholar (訪問學者)"},
+    {e:"invent", k:"/ɪnˈvɛnt/", p:"v.", c:"發明", d:"invent a new device"},
+    {e:"linen", k:"/ˈlɪnɪn/", p:"n.", c:"亞麻布", d:"linen sheets / clothing"},
+    {e:"rag", k:"/ræɡ/", p:"n.", c:"破布", d:"from rags to riches (白手起家/變富有)"},
+    {e:"remarkable", k:"/rɪˈmɑrkəbl/", p:"adj.", c:"非凡卓越的", d:"remarkable achievement / talent"},
+    {e:"to be exact", k:"/tu bi ɪɡˈzækt/", p:"phr.", c:"確切地說", d:"at 10:30, to be exact"},
+    {e:"captive", k:"/ˈkæptɪv/", p:"n.", c:"俘虜", d:"take / hold someone captive"},
+    {e:"recipe", k:"/ˈrɛsəˌpi/", p:"n.", c:"食譜，製作方法", d:"recipe for success (成功的祕訣)"},
+    {e:"be made of", k:"/bi med ʌv/", p:"phr.", c:"由...所製成", d:"This table is made of wood."},
+    {e:"tons of", k:"/tʌnz ʌv/", p:"phr.", c:"很多", d:"tons of homework / money"},
+    {e:"abandoned", k:"/əˈbændənd/", p:"adj.", c:"被拋棄的", d:"abandoned car / building"},
+    {e:"all of a sudden", k:"/ɔl ʌv ə ˈsʌdn/", p:"adv.", c:"突然間", d:"All of a sudden, it started raining."},
+    {e:"get access to", k:"/ɡɛt ˈæksɛs tu/", p:"phr.", c:"得到機會", d:"get access to information / internet"},
+    {e:"stumble upon", k:"/ˈstʌmbl əˈpɑn/", p:"phr.", c:"偶然發現", d:"stumble upon a hidden truth"},
+    {e:"spit", k:"/spɪt/", p:"v.", c:"吐(口水)", d:"spit out the gum (把口香糖吐出來)"},
+    {e:"grind", k:"/ɡraɪnd/", p:"v.", c:"磨碎", d:"grind coffee beans (三態: grind-ground-ground)"},
+    {e:"search for", k:"/sɝtʃ fɔr/", p:"phr.", c:"尋找", d:"search for missing keys"},
+    {e:"alternative", k:"/ɔlˈtɝnətɪv/", p:"n.", c:"可供替代之物", d:"have no alternative but to V"},
+    {e:"formula", k:"/ˈfɔrmjələ/", p:"n.", c:"公式", d:"secret formula (秘密配方)"},
+    {e:"adjust", k:"/əˈdʒʌst/", p:"v.", c:"調整", d:"adjust to the new environment (適應新環境)"},
+    {e:"envelope", k:"/ˈɛnvəˌlop/", p:"n.", c:"信封", d:"seal / open an envelope"},
+    {e:"hemp", k:"/hɛmp/", p:"n.", c:"大麻", d:"hemp rope / fiber (大麻繩/纖維)"},
+    {e:"fishnet", k:"/ˈfɪʃˌnɛt/", p:"n.", c:"漁網", d:"fishnet stockings (漁網襪)"},
+    {e:"texture", k:"/ˈtɛkstʃɚ/", p:"n.", c:"質地", d:"smooth / rough texture"},
+    {e:"experiment with", k:"/ɪkˈspɛrəmənt wɪð/", p:"phr.", c:"用⋯做實驗", d:"experiment with different materials"},
+    {e:"plague", k:"/pleɡ/", p:"n.", c:"瘟疫", d:"be plagued by problems (常作動詞：受折磨)"},
+    {e:"coincidentally", k:"/koˌɪnsəˈdɛntlɪ/", p:"adv.", c:"巧合地", d:"Coincidentally, I ran into him too."},
+    {e:"wasp", k:"/wɑsp/", p:"n.", c:"黃蜂", d:"wasp nest (黃蜂巢)"},
+    {e:"munch on", k:"/mʌntʃ ɑn/", p:"phr.", c:"咀嚼", d:"munch on chips / popcorn"},
+    {e:"mush", k:"/mʌʃ/", p:"n.", c:"軟糊狀黏稠物", d:"cook into mush (煮成糊狀)"},
+    {e:"proportion", k:"/prəˈporʃən/", p:"n.", c:"比例", d:"in proportion to... (與...成比例)"},
+    {e:"work wonders", k:"/wɝk ˈwʌndɚz/", p:"phr.", c:"有神奇效果", d:"This medicine works wonders."},
+    {e:"relieve", k:"/rɪˈliv/", p:"v.", c:"解除，緩解", d:"relieve stress / pain"},
+    {e:"heal", k:"/hil/", p:"v.", c:"治療", d:"heal the wound (傷口癒合)"},
+    {e:"ease", k:"/iz/", p:"v.", c:"緩和", d:"ease the traffic / anxiety"},
+    {e:"rage", k:"/redʒ/", p:"n.", c:"憤怒", d:"fly into a rage (勃然大怒)"},
+    {e:"be traced back to", k:"/bi trest bæk tu/", p:"phr.", c:"回溯至⋯", d:"The history can be traced back to 1920."},
+    {e:"shepherd", k:"/ˈʃɛpɚd/", p:"n.", c:"牧羊人", d:"German Shepherd (德國牧羊犬)"},
+    {e:"palace", k:"/ˈpæləs/", p:"n.", c:"宮殿", d:"Buckingham Palace (白金漢宮)"},
+    {e:"mental disorder", k:"/ˈmɛntl dɪsˈɔrdɚ/", p:"n.", c:"心理疾病", d:"suffer from a mental disorder"},
+    {e:"be equipped with", k:"/bi ɪˈkwɪpt wɪð/", p:"phr.", c:"有⋯裝備", d:"The lab is equipped with modern tools."},
+    {e:"be stricken by", k:"/bi ˈstrɪkən baɪ/", p:"phr.", c:"罹患⋯", d:"be stricken by poverty / disease"},
+    {e:"be recognized as", k:"/bi ˈrɛkəɡˌnaɪzd æz/", p:"phr.", c:"公認為⋯", d:"be widely recognized as a pioneer"},
+    {e:"therapy", k:"/ˈθɛrəpɪ/", p:"n.", c:"療法", d:"physical / music therapy"},
+    {e:"therapeutic", k:"/ˌθɛrəˈpjutɪk/", p:"adj.", c:"治療性的", d:"therapeutic effect (療效)"},
+    {e:"soothe", k:"/suð/", p:"v.", c:"舒緩", d:"soothe a crying baby / throat"},
+    {e:"strained", k:"/strend/", p:"adj.", c:"緊張有壓力的", d:"strained relationship (緊張的關係)"},
+    {e:"purify", k:"/ˈpjʊrəˌfaɪ/", p:"v.", c:"淨化", d:"purify the air / water"},
+    {e:"biblical", k:"/ˈbɪblɪkl/", p:"adj.", c:"聖經的", d:"in biblical times (在聖經時代)"},
+    {e:"harp", k:"/hɑrp/", p:"n.", c:"豎琴", d:"play the harp (彈豎琴)"},
+    {e:"entitle", k:"/ɪnˈtaɪtl/", p:"v.", c:"將書命名為", d:"be entitled + 書名 (也被動指：有資格)"},
+    {e:"anatomy", k:"/əˈnætəmɪ/", p:"n.", c:"解剖學", d:"human anatomy (人體解剖學)"},
+    {e:"melancholy", k:"/ˈmɛlənˌkɑlɪ/", p:"n.", c:"憂鬱", d:"a deep feeling of melancholy"},
+    {e:"methodology", k:"/ˌmɛθəˈdɑlədʒɪ/", p:"n.", c:"方法論", d:"research methodology (研究方法)"},
+    {e:"incredible", k:"/ɪnˈkrɛdəbl/", p:"adj.", c:"不可思議的", d:"an incredible story / speed"},
+    {e:"translation", k:"/trænsˈleʃən/", p:"n.", c:"譯本", d:"literal translation (直譯)"},
+    {e:"mixture", k:"/ˈmɪkstʃɚ/", p:"n.", c:"混合物", d:"a mixture of oil and water"},
+    {e:"physician", k:"/fɪˈzɪʃən/", p:"n.", c:"內科醫生", d:"consult a physician (諮詢醫生)"},
+    {e:"in other words", k:"/ɪn ˈʌðɚ wɝdz/", p:"phr.", c:"換句話說", d:"In other words, you are fired."},
+    {e:"erase", k:"/ɪˈres/", p:"v.", c:"擦去", d:"erase mistakes / memories"},
+    {e:"contents", k:"/ˈkɑntɛnts/", p:"n.", c:"內容", d:"table of contents (目錄)"},
+    {e:"ambitious", k:"/æmˈbɪʃəs/", p:"adj.", c:"有企圖心的", d:"ambitious goal / plan"},
+    {e:"accomplish", k:"/əˈkɑmplɪʃ/", p:"v.", c:"完成", d:"accomplish the mission"},
+    {e:"isolate", k:"/ˈaɪsəˌlet/", p:"v.", c:"孤立", d:"isolate the patient from others"},
+    {e:"comparison", k:"/kəmˈpærəsn/", p:"n.", c:"比較", d:"by comparison (相比之下)"},
+    {e:"eager", k:"/ˈiɡɚ/", p:"adj.", c:"急切渴望的", d:"be eager to learn (渴望學習)"},
+    {e:"in an attempt to", k:"/ɪn æn əˈtɛmpt tu/", p:"phr.", c:"企圖", d:"in an attempt to save money"},
+    {e:"remedy", k:"/ˈrɛmədɪ/", p:"n.", c:"療法", d:"effective remedy for a cold"},
+    {e:"Greco-Roman", k:"/ˌɡrikoˈromən/", p:"adj.", c:"希臘羅馬的", d:"Greco-Roman culture"},
+    {e:"palimpsest", k:"/ˈpælɪmpˌsɛst/", p:"n.", c:"重寫本", d:"ancient palimpsest manuscript"},
+    {e:"Syrian", k:"/ˈsɪrɪən/", p:"adj.", c:"敘利亞的", d:"Syrian refugees (敘利亞難民)"},
+    {e:"scribe", k:"/skraɪb/", p:"n.", c:"抄寫員", d:"ancient royal scribe"},
+    {e:"overwrite", k:"/ˌovɚˈraɪt/", p:"v.", c:"覆寫", d:"overwrite existing files"},
+    {e:"existing", k:"/ɪɡˈzɪstɪŋ/", p:"adj.", c:"現存的", d:"under existing laws (在現存法律下)"},
+    {e:"undergo", k:"/ˌʌndɚˈɡo/", p:"v.", c:"經歷、接受", d:"undergo surgery / training"},
+    {e:"substantial", k:"/səbˈstænʃəl/", p:"adj.", c:"大量的", d:"substantial amount of money"},
+    {e:"version", k:"/ˈvɝʒən/", p:"n.", c:"版本", d:"the latest version of the app"},
+    {e:"Syriac", k:"/ˈsɪrɪˌæk/", p:"n./adj.", c:"古敘利亞文(的)", d:"written in Syriac"},
+    {e:"speculate", k:"/ˈspɛkjəˌlet/", p:"v.", c:"推測", d:"speculate about / on the future"},
+    {e:"undertext", k:"/ˈʌndɚˌtɛkst/", p:"n.", c:"隱藏文本", d:"reveal the hidden undertext"},
+    {e:"expertise", k:"/ˌɛkspɚˈtiz/", p:"n.", c:"專門技術", d:"technical / medical expertise"},
+    {e:"Islamic", k:"/ɪsˈlɑmɪk/", p:"adj.", c:"伊斯蘭的", d:"Islamic architecture"},
+    {e:"decline", k:"/dɪˈklaɪn/", p:"v.", c:"衰落", d:"economic decline (經濟衰退)"}
+];
+
+// 動態更新搜尋欄 Placeholder
+document.getElementById('s').placeholder = `🔍 搜尋 ${data.length} 個單字...`;
+
+function setF(v, b) { filter = v; document.querySelectorAll('.filter-btn').forEach(x => x.classList.remove('active')); b.classList.add('active'); render(); }
+function show(s) { 
+    document.getElementById('secC').className = (s==='c'?'section active':'section');
+    document.getElementById('secQ').className = (s==='q'?'section active':'section');
+    document.getElementById('t1').className = (s==='c'?'tab active':'tab');
+    document.getElementById('t2').className = (s==='q'?'tab active':'tab');
+}
+function speak(t) { window.speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
+function setS(w, s) { if(states[w]===s) delete states[w]; else states[w]=s; localStorage.setItem('vNewDataWithKK', JSON.stringify(states)); render(); }
+function getH(w) { return w.split(' ').map(p => p.length<=1?p:p[0]+"_".repeat(p.length-2)+p[p.length-1]).join(' '); }
+function ans(i, c) {
+    const input = document.getElementById('i'+i), txt = document.getElementById('a'+i), btn = document.getElementById('b'+i);
+    if(txt.style.display==='inline') { txt.style.display='none'; btn.innerText='查看解答'; input.className='spell-input'; }
+    else { txt.style.display='inline'; btn.innerText='收回解答'; input.className = (input.value.trim().toLowerCase()===c.toLowerCase()?'spell-input correct':'spell-input wrong'); }
+}
+function render() {
+    const q = document.getElementById('s').value.toLowerCase(), g = document.getElementById('grid'), l = document.getElementById('list');
+    g.innerHTML = ''; l.innerHTML = '';
+    data.forEach((w, i) => {
+        const s = states[w.e] || 'none';
+        if((filter === 'all' || s === filter) && (w.e.includes(q) || w.c.includes(q))) {
+            const div = document.createElement('div'); div.className = 'card';
+            div.innerHTML = `<div class="card-inner" onclick="this.parentElement.classList.toggle('flipped')">
+                <div class="card-front"><div class="front-main"><div class="word-eng">${w.e}</div><div class="word-kk">${w.k}</div><div class="word-pos">${w.p}</div></div>
+                <div class="front-footer"><div style="font-size:22px; cursor:pointer" onclick="event.stopPropagation(); speak('${w.e}')">🔊</div>
+                <div class="filter-buttons" style="margin-top:8px"><button class="btn-status ${s==='p'?'selected':''}" onclick="event.stopPropagation(); setS('${w.e}','p')">完美</button><button class="btn-status ${s==='n'?'selected':''}" onclick="event.stopPropagation(); setS('${w.e}','n')">普通</button><button class="btn-status ${s==='u'?'selected':''}" onclick="event.stopPropagation(); setS('${w.e}','u')">不熟</button></div></div></div>
+                <div class="card-back"><div class="front-main"><b style="font-size:22px; color:#000;">${w.c}</b><hr style="width:100%; border:1.5px solid var(--rose); margin:12px 0;"><div style="color:var(--deep); font-weight:bold; font-size:14px; text-align:center;">${w.d ? '用法：<br>' + w.d : ''}</div></div></div></div>`;
+            g.appendChild(div);
+            const qdiv = document.createElement('div'); qdiv.className = 'quiz-item';
+            qdiv.innerHTML = `<div class="quiz-header"><b>${w.c}</b> <span style="color:#666; font-size:13px">${w.k} ${w.p}</span> <span style="cursor:pointer" onclick="speak('${w.e}')">🔊</span> <span class="hidden-hint">${getH(w.e)}</span>
+                <div style="margin-left:auto" class="filter-buttons"><button class="btn-status ${s==='p'?'selected':''}" onclick="setS('${w.e}','p')">完美</button><button class="btn-status ${s==='n'?'selected':''}" onclick="setS('${w.e}','n')">普通</button><button class="btn-status ${s==='u'?'selected':''}" onclick="setS('${w.e}','u')">不熟</button></div></div>
+                <div class="quiz-input-area"><input type="text" class="spell-input" id="i${i}" placeholder="挑戰正確拼寫..."><div style="display:flex; align-items:center; margin-top:5px;"><button class="ans-btn" id="b${i}" onclick="ans(${i},'${w.e.replace(/'/g, "\\'")}')">查看解答</button><span class="ans-text" id="a${i}">${w.e}</span></div></div>`;
+            l.appendChild(qdiv);
+        }
+    });
+}
+render();
+</script>
+</body>
+</html>ㄋ
